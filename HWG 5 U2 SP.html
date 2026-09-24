@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Schedule Detective - 課表小偵探</title>
+    <!-- Tailwind CSS for modern responsive layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pastelBlue: '#E2F1FF',
+                        pastelPink: '#FFE5EC',
+                        pastelYellow: '#FFF3BF',
+                        pastelGreen: '#D3F9D8',
+                        pastelPurple: '#EEB2ED',
+                        detectiveNavy: '#1E293B',
+                        detectiveAccent: '#0284C7'
+                    },
+                    fontFamily: {
+                        sans: ['Fredoka', 'Nunito', 'Segoe UI', 'sans-serif'],
+                        zh: ['PingFang TC', 'Microsoft JhengHei', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Fredoka', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+            background: linear-gradient(135deg, #e0f2fe 0%, #fce7f3 50%, #fef9c3 100%);
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Glassmorphism Cards */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.90);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Interactive Animations */
+        .btn-bounce {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .btn-bounce:hover {
+            transform: translateY(-2px) scale(1.02);
+        }
+        .btn-bounce:active {
+            transform: translateY(1px) scale(0.98);
+        }
+
+        /* Wrong Answer Shake Animation */
+        .shake-anim {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 0, 0); }
+            40%, 60% { transform: translate3d(6px, 0, 0); }
+        }
+
+        /* Grammar Highlight Badges - Safe Pill Design (No Tag Leakage) */
+        .grammar-highlight {
+            display: inline-block;
+            background-color: #fef08a;
+            color: #854d0e;
+            font-weight: 800;
+            padding: 2px 8px;
+            margin: 0 2px;
+            border-radius: 8px;
+            border: 1.5px solid #fde047;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        /* Confetti Overlay */
+        #confettiCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 99;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col justify-between p-2 sm:p-4 overflow-x-hidden">
+
+    <canvas id="confettiCanvas"></canvas>
+
+    <!-- HEADER / GAME STATUS BAR -->
+    <header class="w-full max-w-4xl mx-auto glass-card rounded-2xl p-3 sm:p-4 mb-2 flex justify-between items-center shadow-md">
+        <!-- Detective Badge & Title -->
+        <div class="flex items-center space-x-2 sm:space-x-3">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-sky-500 rounded-2xl flex items-center justify-center text-2xl shadow-inner border-2 border-white">
+                🕵️‍♂️
+            </div>
+            <div>
+                <h1 class="font-bold text-base sm:text-xl text-slate-800 leading-tight">Schedule Detective</h1>
+                <p class="text-xs text-sky-600 font-semibold font-zh">課表小偵探 - 英語句型大破解</p>
+            </div>
+        </div>
+
+        <!-- Progress and Stars -->
+        <div class="flex flex-col items-end w-32 sm:w-48">
+            <div class="flex justify-between w-full text-xs font-bold text-slate-600 mb-1">
+                <span>CASE <span id="currentLevel">1</span>/6</span>
+                <span>⭐ <span id="scoreStars">0</span></span>
+            </div>
+            <div class="w-full bg-slate-200 h-3.5 rounded-full overflow-hidden p-0.5 border border-slate-300">
+                <div id="progressBar" class="bg-gradient-to-r from-sky-400 to-emerald-400 h-full rounded-full transition-all duration-300" style="width: 16%;"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="w-full max-w-4xl mx-auto flex-1 flex flex-col justify-center space-y-3">
+        
+        <!-- START SCREEN -->
+        <div id="startScreen" class="glass-card rounded-3xl p-6 sm:p-8 text-center flex flex-col items-center justify-center my-auto shadow-xl">
+            <div class="text-6xl sm:text-7xl mb-4 animate-bounce">🔍</div>
+            <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-800 mb-2">Schedule Detective!</h2>
+            <p class="text-slate-600 text-sm sm:text-base max-w-md mb-6 font-zh">
+                Alex, Mia, and their classmates need help with their weekly schedules! Inspect their timetables and answer target questions!
+            </p>
+
+            <div class="bg-sky-50 p-4 rounded-2xl border border-sky-200 text-left max-w-md w-full mb-6 text-xs sm:text-sm text-slate-700 space-y-1">
+                <div class="font-bold text-sky-800 mb-1">🔑 Detective Grammar Grammar Clues:</div>
+                <div>• Use <span class="grammar-highlight">do</span> / <span class="grammar-highlight">don't</span> for <b>You / I</b>.</div>
+                <div>• Use <span class="grammar-highlight">does</span> / <span class="grammar-highlight">doesn't</span> for <b>He / She</b>.</div>
+            </div>
+
+            <button id="startGameBtn" class="btn-bounce bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-lg sm:text-xl py-3.5 px-10 rounded-2xl shadow-lg border-2 border-white/50 flex items-center space-x-2">
+                <span>START INVESTIGATION</span> <span>🚀</span>
+            </button>
+        </div>
+
+        <!-- GAMEPLAY SCREEN -->
+        <div id="gameScreen" class="hidden flex flex-col space-y-3">
+            
+            <!-- CHARACTER DIALOGUE BANNER -->
+            <div class="glass-card rounded-2xl p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4 border-l-8 border-sky-500 shadow-sm">
+                <div id="avatarBox" class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-amber-100 border-2 border-amber-300 flex items-center justify-center text-3xl sm:text-4xl shrink-0 shadow-inner">
+                    👦
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center space-x-2">
+                        <span id="characterName" class="font-bold text-sm sm:text-base text-sky-700 uppercase tracking-wide">Alex</span>
+                        <span id="modeBadge" class="text-[10px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-600 border border-pink-200">
+                            MODE A: BUILD QUESTION
+                        </span>
+                    </div>
+                    <div id="dialoguePrompt" class="text-sm sm:text-lg font-extrabold text-slate-800 mt-0.5 leading-snug">
+                        Ask Alex about his schedule!
+                    </div>
+                </div>
+            </div>
+
+            <!-- INTERACTIVE TIMETABLE DISPLAY -->
+            <div class="glass-card rounded-2xl p-3 sm:p-4 shadow-sm">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        🗓️ <span id="characterScheduleTitle">Weekly Timetable</span>
+                    </span>
+                    <span class="text-[11px] text-slate-400 font-zh">點擊對照課表</span>
+                </div>
+                <!-- Dynamic Days Grid (Sun - Sat) -->
+                <div id="scheduleGrid" class="grid grid-cols-7 gap-1 sm:gap-1.5 text-center">
+                    <!-- Schedule cells injected by JavaScript -->
+                </div>
+            </div>
+
+            <!-- MODE A: SENTENCE BUILDER -->
+            <div id="modeABox" class="glass-card rounded-2xl p-3 sm:p-4 space-y-3">
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    🧩 Tap word chips in order to form the question:
+                </div>
+                
+                <!-- Target Dropzone Slots -->
+                <div id="sentenceSlots" class="min-h-[52px] bg-slate-100/80 rounded-xl p-2 flex flex-wrap gap-1.5 items-center justify-center border-2 border-dashed border-slate-300 transition-all">
+                    <!-- Word Slots will be dynamically filled -->
+                </div>
+
+                <!-- Word Bank Pool -->
+                <div id="wordBank" class="flex flex-wrap gap-1.5 sm:gap-2 justify-center pt-2 border-t border-slate-200">
+                    <!-- Dynamic Word Chips -->
+                </div>
+
+                <div class="flex space-x-2 pt-1">
+                    <button id="clearSentenceBtn" class="btn-bounce bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs sm:text-sm">
+                        🗑️ Reset
+                    </button>
+                    <button id="submitSentenceBtn" class="btn-bounce flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-2.5 px-4 rounded-xl text-xs sm:text-sm shadow-md flex items-center justify-center space-x-1">
+                        <span>Check Sentence</span> <span>🔍</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- MODE B: MULTIPLE CHOICE QUESTION -->
+            <div id="modeBBox" class="glass-card rounded-2xl p-3 sm:p-4 space-y-3 hidden">
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    🎯 Choose the correct response based on the schedule:
+                </div>
+                
+                <div id="choiceGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <!-- 4 Choice Buttons populated dynamically -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- REWARD & VICTORY OVERLAY -->
+        <div id="victoryScreen" class="glass-card rounded-3xl p-6 sm:p-8 text-center flex flex-col items-center justify-center my-auto shadow-2xl hidden">
+            <div class="text-6xl sm:text-7xl mb-3 animate-bounce">🏆</div>
+            <h2 class="text-3xl sm:text-4xl font-black text-slate-800 mb-1">Case Solved!</h2>
+            <p class="text-sky-600 font-bold text-base sm:text-lg mb-4 font-zh">恭喜！你成功破解所有課表謎題！</p>
+
+            <div id="starContainer" class="flex justify-center space-x-2 text-4xl mb-6">
+                <!-- Stars rendered via JS -->
+            </div>
+
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 max-w-sm w-full mb-6 font-zh text-sm space-y-2">
+                <div class="flex justify-between text-slate-600">
+                    <span>正確率 (Accuracy):</span>
+                    <span id="finalAccuracy" class="font-bold text-slate-800">100%</span>
+                </div>
+                <div class="flex justify-between text-slate-600">
+                    <span>偵探階級 (Detective Rank):</span>
+                    <span id="detectiveRank" class="font-bold text-sky-600">Master Detective</span>
+                </div>
+            </div>
+
+            <button id="restartGameBtn" class="btn-bounce bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold text-lg py-3 px-8 rounded-2xl shadow-lg border-2 border-white/50">
+                Play Again 🔄
+            </button>
+        </div>
+
+    </main>
+
+    <!-- FEEDBACK POPUP TOOLTIP -->
+    <div id="feedbackModal" class="fixed inset-x-4 bottom-6 max-w-lg mx-auto glass-card border-2 rounded-2xl p-4 shadow-2xl transform translate-y-32 opacity-0 transition-all duration-300 pointer-events-none z-50 flex items-start space-x-3">
+        <div id="feedbackIcon" class="text-3xl shrink-0">💡</div>
+        <div class="flex-1">
+            <div id="feedbackTitle" class="font-bold text-base text-slate-800">Grammar Tip</div>
+            <div id="feedbackBody" class="text-xs sm:text-sm text-slate-600 font-zh mt-0.5 leading-relaxed">
+                Remember: Use does for he/she!
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="w-full max-w-4xl mx-auto text-center py-2 text-xs text-slate-500 font-zh">
+        Elementary EFL English Learning Game • 國小五年級英語句型：Do / Does 課表問答
+    </footer>
+
+    <script>
+        // ==========================================
+        // 1. SOUND SYNTHESIZER (Web Audio API)
+        // ==========================================
+        class SoundManager {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+            }
+
+            playCorrect() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                
+                const osc1 = this.ctx.createOscillator();
+                const osc2 = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc1.type = 'sine';
+                osc2.type = 'triangle';
+
+                osc1.frequency.setValueAtTime(523.25, now);     // C5
+                osc1.frequency.setValueAtTime(659.25, now + 0.1); // E5
+                osc1.frequency.setValueAtTime(783.99, now + 0.2); // G5
+
+                osc2.frequency.setValueAtTime(1046.50, now + 0.2); // C6
+
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc1.start(now);
+                osc2.start(now);
+                osc1.stop(now + 0.45);
+                osc2.stop(now + 0.45);
+            }
+
+            playWrong() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.linearRampToValueAtTime(140, now + 0.25);
+
+                gain.gain.setValueAtTime(0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+
+            playClick() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            }
+        }
+
+        const soundManager = new SoundManager();
+
+        // ==========================================
+        // 2. DATA CONSTANTS (All Days & Subjects)
+        // ==========================================
+        const DAYS = [
+            { id: 'Sun', name: 'Sunday', short: 'Sun' },
+            { id: 'Mon', name: 'Monday', short: 'Mon' },
+            { id: 'Tue', name: 'Tuesday', short: 'Tue' },
+            { id: 'Wed', name: 'Wednesday', short: 'Wed' },
+            { id: 'Thu', name: 'Thursday', short: 'Thu' },
+            { id: 'Fri', name: 'Friday', short: 'Fri' },
+            { id: 'Sat', name: 'Saturday', short: 'Sat' }
+        ];
+
+        const SUBJECTS = [
+            { id: 'Art', name: 'Art', icon: '🎨', color: 'bg-pink-100 text-pink-700' },
+            { id: 'Chinese', name: 'Chinese', icon: '📖', color: 'bg-red-100 text-red-700' },
+            { id: 'English', name: 'English', icon: '🔤', color: 'bg-blue-100 text-blue-700' },
+            { id: 'Math', name: 'Math', icon: '📐', color: 'bg-amber-100 text-amber-700' },
+            { id: 'Music', name: 'Music', icon: '🎵', color: 'bg-purple-100 text-purple-700' },
+            { id: 'PE', name: 'PE', icon: '⚽', color: 'bg-emerald-100 text-emerald-700' },
+            { id: 'Science', name: 'Science', icon: '🔬', color: 'bg-teal-100 text-teal-700' },
+            { id: 'Social Studies', name: 'Social Studies', icon: '🌏', color: 'bg-indigo-100 text-indigo-700' }
+        ];
+
+        const CHARACTERS = [
+            { id: 'Alex', name: 'Alex', pronoun: 'he', avatar: '👦', label: 'he (他)' },
+            { id: 'Mia', name: 'Mia', pronoun: 'she', avatar: '👧', label: 'she (她)' },
+            { id: 'Leo', name: 'Leo', pronoun: 'he', avatar: '👨‍🏫', label: 'he (他)' },
+            { id: 'Emma', name: 'Emma', pronoun: 'she', avatar: '👧', label: 'she (她)' },
+            { id: 'Kevin', name: 'Kevin', pronoun: 'you', avatar: '🙋‍♂️', label: 'you (你)' }
+        ];
+
+        // ==========================================
+        // 3. SAFE GRAMMAR FORMATTER (FIXES Leakage)
+        // ==========================================
+        function safeHighlightGrammar(text) {
+            if (!text) return '';
+            // Safe regex matching standalone word boundaries only (\b)
+            // Wraps target auxiliaries in a styled span without leaking raw tags
+            return text.replace(/\b(does|doesn't|do|don't)\b/gi, (match) => {
+                return `<span class="grammar-highlight">${match}</span>`;
+            });
+        }
+
+        // ==========================================
+        // 4. GAME STATE & CASE GENERATOR
+        // ==========================================
+        let currentCaseIndex = 0;
+        let scoreStars = 0;
+        let totalAttempts = 0;
+        let totalCorrect = 0;
+
+        let cases = [];
+        let currentSlotWords = [];
+
+        function generateCases() {
+            cases = [
+                // Case 1: Mode A - 3rd Person Singular
+                {
+                    mode: 'A',
+                    char: CHARACTERS[0], // Alex (he)
+                    day: DAYS[1], // Monday
+                    subject: SUBJECTS[3], // Math
+                    schedule: createSchedule(SUBJECTS[3].id, DAYS[1].id, true),
+                    targetQuestionWords: ['Does', 'he', 'have', 'Math', 'on', 'Monday?'],
+                    extraWords: ['Do', 'she', 'has', 'in']
+                },
+                // Case 2: Mode B - 3rd Person Affirmative
+                {
+                    mode: 'B',
+                    char: CHARACTERS[1], // Mia (she)
+                    day: DAYS[3], // Wednesday
+                    subject: SUBJECTS[6], // Science
+                    schedule: createSchedule(SUBJECTS[6].id, DAYS[3].id, true),
+                    questionText: "Does she have Science on Wednesday?",
+                    choices: [
+                        { text: "Yes, she does.", correct: true },
+                        { text: "No, she doesn't.", correct: false, tip: "Check Mia's Wednesday schedule! She HAS Science! 🔬" },
+                        { text: "Yes, I do.", correct: false, tip: "Mia is 'she', so match with 'she does', not 'I do'!" },
+                        { text: "No, he doesn't.", correct: false, tip: "Mia is a girl! Use 'she', not 'he'!" }
+                    ]
+                },
+                // Case 3: Mode A - 2nd Person (Do you...)
+                {
+                    mode: 'A',
+                    char: CHARACTERS[4], // Kevin (you)
+                    day: DAYS[5], // Friday
+                    subject: SUBJECTS[2], // English
+                    schedule: createSchedule(SUBJECTS[2].id, DAYS[5].id, true),
+                    targetQuestionWords: ['Do', 'you', 'have', 'English', 'on', 'Friday?'],
+                    extraWords: ['Does', 'he', 'has', 'at']
+                },
+                // Case 4: Mode B - 3rd Person Negative
+                {
+                    mode: 'B',
+                    char: CHARACTERS[2], // Leo (he)
+                    day: DAYS[2], // Tuesday
+                    subject: SUBJECTS[5], // PE
+                    schedule: createSchedule(SUBJECTS[5].id, DAYS[2].id, false), // No PE on Tuesday
+                    questionText: "Does he have PE on Tuesday?",
+                    choices: [
+                        { text: "No, he doesn't.", correct: true },
+                        { text: "Yes, he does.", correct: false, tip: "Check Tuesday's timetable! He DOES NOT have PE." },
+                        { text: "No, I don't.", correct: false, tip: "Leo is 'he'. Match 'Does he' with 'he doesn't'!" },
+                        { text: "Yes, she does.", correct: false, tip: "Leo is 'he', not 'she'!" }
+                    ]
+                },
+                // Case 5: Mode B - 2nd Person Response
+                {
+                    mode: 'B',
+                    char: CHARACTERS[4], // Kevin (you)
+                    day: DAYS[4], // Thursday
+                    subject: SUBJECTS[0], // Art
+                    schedule: createSchedule(SUBJECTS[0].id, DAYS[4].id, true),
+                    questionText: "Do you have Art on Thursday?",
+                    choices: [
+                        { text: "Yes, I do.", correct: true },
+                        { text: "Yes, he does.", correct: false, tip: "When asked 'Do you...?', reply with 'I do'!" },
+                        { text: "No, I don't.", correct: false, tip: "Check Thursday! There IS Art class 🎨." },
+                        { text: "Yes, I does.", correct: false, tip: "Grammar Rule: Never say 'I does'! Use 'I do'!" }
+                    ]
+                },
+                // Case 6: Mode B - Weekend Schedule (Sunday)
+                {
+                    mode: 'B',
+                    char: CHARACTERS[3], // Emma (she)
+                    day: DAYS[0], // Sunday
+                    subject: SUBJECTS[4], // Music
+                    schedule: createSchedule(SUBJECTS[4].id, DAYS[0].id, true),
+                    questionText: "Does she have Music on Sunday?",
+                    choices: [
+                        { text: "Yes, she does.", correct: true },
+                        { text: "No, she doesn't.", correct: false, tip: "Look at Sunday's schedule! She HAS Music! 🎵" },
+                        { text: "Yes, I do.", correct: false, tip: "Emma is 'she'! Match with 'she does'." },
+                        { text: "No, he doesn't.", correct: false, tip: "Emma is 'she', not 'he'!" }
+                    ]
+                }
+            ];
+        }
+
+        function createSchedule(targetSubjectId, targetDayId, shouldHaveSubject) {
+            const schedule = {};
+            DAYS.forEach(day => {
+                if (day.id === targetDayId) {
+                    if (shouldHaveSubject) {
+                        schedule[day.id] = SUBJECTS.find(s => s.id === targetSubjectId);
+                    } else {
+                        const otherSubs = SUBJECTS.filter(s => s.id !== targetSubjectId);
+                        schedule[day.id] = otherSubs[Math.floor(Math.random() * otherSubs.length)];
+                    }
+                } else {
+                    schedule[day.id] = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)];
+                }
+            });
+            return schedule;
+        }
+
+        // ==========================================
+        // 5. UI RENDER FUNCTIONS
+        // ==========================================
+        function renderHeaderProgress() {
+            document.getElementById('currentLevel').innerText = currentCaseIndex + 1;
+            document.getElementById('scoreStars').innerText = scoreStars;
+            const progressPct = ((currentCaseIndex + 1) / cases.length) * 100;
+            document.getElementById('progressBar').style.width = `${progressPct}%`;
+        }
+
+        function renderTimetable(char, schedule) {
+            document.getElementById('characterScheduleTitle').innerText = `${char.name}'s Weekly Timetable`;
+            const gridEl = document.getElementById('scheduleGrid');
+            gridEl.innerHTML = '';
+
+            DAYS.forEach(day => {
+                const sub = schedule[day.id];
+                const col = document.createElement('div');
+                col.className = 'flex flex-col bg-slate-50/90 rounded-xl p-1 border border-slate-200/80 items-center justify-between min-h-[65px] sm:min-h-[80px] shadow-2xl';
+                col.innerHTML = `
+                    <span class="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-tight">${day.short}</span>
+                    <div class="text-xl sm:text-2xl my-0.5">${sub.icon}</div>
+                    <span class="text-[9px] sm:text-[11px] font-bold ${sub.color.split(' ')[1]} font-sans leading-none line-clamp-1">${sub.name}</span>
+                `;
+                gridEl.appendChild(col);
+            });
+        }
+
+        function loadCurrentCase() {
+            renderHeaderProgress();
+            const caseData = cases[currentCaseIndex];
+
+            document.getElementById('avatarBox').innerText = caseData.char.avatar;
+            document.getElementById('characterName').innerText = `${caseData.char.name} (${caseData.char.label})`;
+            document.getElementById('modeBadge').innerText = caseData.mode === 'A' ? 'MODE A: BUILD QUESTION' : 'MODE B: ANSWER QUESTION';
+
+            renderTimetable(caseData.char, caseData.schedule);
+
+            const modeABox = document.getElementById('modeABox');
+            const modeBBox = document.getElementById('modeBBox');
+
+            if (caseData.mode === 'A') {
+                modeABox.classList.remove('hidden');
+                modeBBox.classList.add('hidden');
+                document.getElementById('dialoguePrompt').innerText = `Form a question about ${caseData.char.name}'s ${caseData.day.name} schedule!`;
+                setupModeA(caseData);
+            } else {
+                modeABox.classList.add('hidden');
+                modeBBox.classList.remove('hidden');
+                // Use safe highlight formatter to avoid HTML string leakage
+                document.getElementById('dialoguePrompt').innerHTML = `
+                    <span class="text-sky-600 font-extrabold">"${safeHighlightGrammar(caseData.questionText)}"</span>
+                `;
+                setupModeB(caseData);
+            }
+        }
+
+        // ==========================================
+        // 6. MODE A LOGIC
+        // ==========================================
+        function setupModeA(caseData) {
+            currentSlotWords = [];
+            renderSentenceSlots();
+
+            const allWords = [...caseData.targetQuestionWords, ...caseData.extraWords];
+            allWords.sort(() => Math.random() - 0.5);
+
+            const wordBankEl = document.getElementById('wordBank');
+            wordBankEl.innerHTML = '';
+
+            allWords.forEach((word, idx) => {
+                const chip = document.createElement('button');
+                chip.className = 'btn-bounce bg-white hover:bg-sky-50 text-slate-800 font-bold px-3 py-2 rounded-xl border-2 border-slate-200 shadow-sm text-sm sm:text-base font-sans';
+                chip.innerText = word;
+                chip.dataset.word = word;
+                chip.dataset.id = idx;
+                chip.onclick = () => {
+                    soundManager.playClick();
+                    currentSlotWords.push({ word, id: idx });
+                    chip.classList.add('opacity-30', 'pointer-events-none');
+                    renderSentenceSlots();
+                };
+                wordBankEl.appendChild(chip);
+            });
+        }
+
+        function renderSentenceSlots() {
+            const slotsEl = document.getElementById('sentenceSlots');
+            slotsEl.innerHTML = '';
+
+            if (currentSlotWords.length === 0) {
+                slotsEl.innerHTML = `<span class="text-xs text-slate-400 font-zh">點擊下方單字區塊來重組句子...</span>`;
+                return;
+            }
+
+            currentSlotWords.forEach((item, index) => {
+                const wordBtn = document.createElement('button');
+                let customBg = 'bg-sky-500 text-white';
+                if (item.word.toLowerCase() === 'does') customBg = 'bg-amber-500 text-white';
+                if (item.word.toLowerCase() === 'do') customBg = 'bg-blue-600 text-white';
+
+                wordBtn.className = `btn-bounce ${customBg} font-bold px-3 py-1.5 rounded-lg text-sm sm:text-base flex items-center space-x-1 shadow-sm`;
+                wordBtn.innerHTML = `<span>${item.word}</span> <span class="text-xs opacity-70">×</span>`;
+                wordBtn.onclick = () => {
+                    soundManager.playClick();
+                    const bankChip = document.querySelector(`#wordBank [data-id="${item.id}"]`);
+                    if (bankChip) bankChip.classList.remove('opacity-30', 'pointer-events-none');
+                    currentSlotWords.splice(index, 1);
+                    renderSentenceSlots();
+                };
+                slotsEl.appendChild(wordBtn);
+            });
+        }
+
+        document.getElementById('clearSentenceBtn').onclick = () => {
+            soundManager.playClick();
+            if (cases[currentCaseIndex].mode === 'A') setupModeA(cases[currentCaseIndex]);
+        };
+
+        document.getElementById('submitSentenceBtn').onclick = () => {
+            totalAttempts++;
+            const caseData = cases[currentCaseIndex];
+            const builtSentence = currentSlotWords.map(w => w.word).join(' ');
+            const targetSentence = caseData.targetQuestionWords.join(' ');
+
+            if (builtSentence === targetSentence) {
+                handleSuccess("Perfect Question! ✨ Question built correctly!");
+            } else {
+                let tip = "Check your word order!";
+                if (builtSentence.startsWith('Do') && caseData.targetQuestionWords[0] === 'Does') {
+                    tip = "Remember: Use 'Does' for he/she!";
+                } else if (builtSentence.startsWith('Does') && caseData.targetQuestionWords[0] === 'Do') {
+                    tip = "Remember: Use 'Do' for you/I!";
+                }
+                handleFailure(tip);
+            }
+        };
+
+        // ==========================================
+        // 7. MODE B LOGIC (NO Tag Leakage)
+        // ==========================================
+        function setupModeB(caseData) {
+            const gridEl = document.getElementById('choiceGrid');
+            gridEl.innerHTML = '';
+
+            const shuffledChoices = [...caseData.choices].sort(() => Math.random() - 0.5);
+
+            shuffledChoices.forEach(choice => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-bounce glass-card hover:bg-sky-50/80 text-slate-800 font-bold p-3.5 rounded-2xl border-2 border-slate-200/80 text-left text-sm sm:text-base flex items-center justify-between shadow-sm';
+                
+                // Formatted display text using safe highlight parser
+                const formattedHtml = safeHighlightGrammar(choice.text);
+
+                btn.innerHTML = `<span>${formattedHtml}</span> <span class="text-slate-300">➜</span>`;
+                btn.onclick = () => {
+                    totalAttempts++;
+                    if (choice.correct) {
+                        handleSuccess("Spot on! 🎯 Excellent timetable investigation!");
+                    } else {
+                        handleFailure(choice.tip || "Look closely at the schedule and pronoun!");
+                    }
+                };
+                gridEl.appendChild(btn);
+            });
+        }
+
+        // ==========================================
+        // 8. FEEDBACK & PROGRESSION
+        // ==========================================
+        function handleSuccess(msg) {
+            totalCorrect++;
+            soundManager.playCorrect();
+            scoreStars += 3;
+
+            showFeedback(true, "Great Job! 🎉", msg);
+
+            setTimeout(() => {
+                currentCaseIndex++;
+                if (currentCaseIndex < cases.length) {
+                    loadCurrentCase();
+                } else {
+                    showVictoryScreen();
+                }
+            }, 1500);
+        }
+
+        function handleFailure(tipMsg) {
+            soundManager.playWrong();
+            const mainEl = document.querySelector('main');
+            mainEl.classList.add('shake-anim');
+            setTimeout(() => mainEl.classList.remove('shake-anim'), 500);
+
+            showFeedback(false, "Try Again! 💡", tipMsg);
+        }
+
+        function showFeedback(isSuccess, title, text) {
+            const modal = document.getElementById('feedbackModal');
+            const icon = document.getElementById('feedbackIcon');
+            const titleEl = document.getElementById('feedbackTitle');
+            const bodyEl = document.getElementById('feedbackBody');
+
+            icon.innerText = isSuccess ? '🌟' : '💡';
+            titleEl.innerText = title;
+            titleEl.className = `font-bold text-base ${isSuccess ? 'text-emerald-700' : 'text-amber-700'}`;
+            bodyEl.innerText = text;
+
+            modal.className = `fixed inset-x-4 bottom-6 max-w-lg mx-auto glass-card border-2 ${isSuccess ? 'border-emerald-300 bg-emerald-50/95' : 'border-amber-300 bg-amber-50/95'} rounded-2xl p-4 shadow-2xl transform translate-y-0 opacity-100 transition-all duration-300 z-50 flex items-start space-x-3`;
+
+            setTimeout(() => {
+                modal.classList.add('translate-y-32', 'opacity-0');
+            }, 2200);
+        }
+
+        // ==========================================
+        // 9. VICTORY & CONFETTI
+        // ==========================================
+        function showVictoryScreen() {
+            document.getElementById('gameScreen').classList.add('hidden');
+            const victoryScreen = document.getElementById('victoryScreen');
+            victoryScreen.classList.remove('hidden');
+
+            const accuracy = Math.round((totalCorrect / totalAttempts) * 100) || 100;
+            document.getElementById('finalAccuracy').innerText = `${accuracy}%`;
+
+            let rank = "Senior Detective 🕵️‍♂️";
+            if (accuracy >= 90) rank = "Master Detective 🏆";
+            else if (accuracy < 70) rank = "Junior Detective 🔍";
+            document.getElementById('detectiveRank').innerText = rank;
+
+            const starContainer = document.getElementById('starContainer');
+            starContainer.innerHTML = '';
+            const starsEarned = accuracy >= 80 ? 3 : accuracy >= 60 ? 2 : 1;
+            for (let i = 0; i < 3; i++) {
+                const star = document.createElement('span');
+                star.innerText = i < starsEarned ? '⭐' : '⚪';
+                star.className = 'animate-bounce';
+                star.style.animationDelay = `${i * 0.15}s`;
+                starContainer.appendChild(star);
+            }
+
+            launchConfetti();
+        }
+
+        function launchConfetti() {
+            const canvas = document.getElementById('confettiCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const pieces = Array.from({ length: 80 }, () => ({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height - canvas.height,
+                size: Math.random() * 10 + 5,
+                color: ['#38bdf8', '#f472b6', '#facc15', '#4ade80', '#c084fc'][Math.floor(Math.random() * 5)],
+                vy: Math.random() * 3 + 2,
+                vx: Math.random() * 2 - 1
+            }));
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                pieces.forEach(p => {
+                    p.y += p.vy;
+                    p.x += p.vx;
+                    if (p.y > canvas.height) p.y = -20;
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(p.x, p.y, p.size, p.size);
+                });
+                if (!victoryScreen.classList.contains('hidden')) {
+                    requestAnimationFrame(draw);
+                }
+            }
+            draw();
+        }
+
+        // ==========================================
+        // 10. INITIALIZATION
+        // ==========================================
+        document.getElementById('startGameBtn').onclick = () => {
+            soundManager.init();
+            soundManager.playClick();
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            
+            currentCaseIndex = 0;
+            scoreStars = 0;
+            totalAttempts = 0;
+            totalCorrect = 0;
+            generateCases();
+            loadCurrentCase();
+        };
+
+        document.getElementById('restartGameBtn').onclick = () => {
+            soundManager.playClick();
+            document.getElementById('victoryScreen').classList.add('hidden');
+            document.getElementById('startScreen').classList.remove('hidden');
+        };
+    </script>
+</body>
+</html>
